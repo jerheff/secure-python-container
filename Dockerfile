@@ -1,54 +1,92 @@
 # syntax = docker/dockerfile:1
 
 # Set the base image to build off of
-ARG image=public.ecr.aws/amazonlinux/amazonlinux:2022.0.20220728.1
+ARG image=public.ecr.aws/amazonlinux/amazonlinux:2022.0.20220728.1@sha256:bc662315d5d88bc38832fe6f1223df1c99580ade96e41d09935967f248778987
 # Set the desired version of python to use
 ARG pythonversion=3.10.6
 
-# BUILDER
+# BUILDER - installs sytem packages for compilation
 FROM ${image} as builder
 # Install pyenv installation and python build requirements
-RUN dnf install -y git tar findutils patch make gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf install -y \
+    git tar findutils patch \
+    make gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel
 
 
-# PYENV installation
-FROM builder as pyenv 
+# PYTHONBUILDER - creates the desired version of python
+FROM builder as pythonbuilder
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Install pyenv
 RUN curl https://pyenv.run | bash
 ENV PATH /root/.pyenv/bin:$PATH
 
-# PYTHON compilation
-FROM pyenv as python
-ARG pythonversion
-
 # Install the desired version of python
-RUN pyenv install ${pythonversion}
+ARG pythonversion
+RUN pyenv install ${pythonversion} -v && \
+    pyenv global ${pythonversion} && \
+    pyenv rehash && \
+    find /root/.pyenv/versions/ -depth \
+    \( \
+    \( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
+    -o \( -type f -a \( -name '*.pyc' -o -name '*.pyo' -o -name '*.a' \) \) \
+    \) -exec rm -rf '{}' +
+
 ENV PATH /root/.pyenv/versions/${pythonversion}/bin:$PATH
 
-# BASE image setup
-FROM ${image} as base
-ARG pythonversion
 
-# Copy the compiled Python install over to the base image
-COPY --from=python /root/.pyenv/versions/ /root/.pyenv/versions/
-
-# APP venv setup
-FROM python as app
+# APPBUILDER - creates the application virtual environment
+FROM pythonbuilder as appbuilder
 ARG pythonversion
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONOPTIMIZE=2
+
 # Setup poetry
-RUN --mount=type=cache,target=/root/.cache/pip python3 -m ensurepip --upgrade && pip3 install -U pip poetry
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m ensurepip --upgrade && \
+    pip3 install --no-compile -U pip poetry
 
 WORKDIR /app
 # Create the venv for the project
 COPY pyproject.toml poetry.lock ./
-RUN --mount=type=cache,target=/root/.cache/pypoetry poetry config virtualenvs.in-project true && poetry env use ${pythonversion} && poetry install --no-dev --remove-untracked -n
+RUN --mount=type=cache,target=/root/.cache/pypoetry \
+    poetry config virtualenvs.in-project true && \
+    poetry env use ${pythonversion} && \
+    poetry install --no-dev --remove-untracked -n && \
+    find .venv -depth \
+    \( \
+    \( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
+    -o \( -type f -a \( -name '*.pyc' -o -name '*.pyo' -o -name '*.a' \) \) \
+    \) -exec rm -rf '{}' + && \
+    chmod +x .venv/bin/*
 
-# RUNTIME creation
-FROM base as runtime
 
+# RUNTIME - creates the runtime environment
+FROM ${image} as runtime
+ARG pythonversion
+
+ENV PYTHONDONTWRITEBYTECODE=1
+
+RUN dnf -y install shadow-utils && \
+    dnf -y clean all && \
+    rm -rf /var/cache/* && \
+    rm -rf /var/lib/dnf/* && \
+    rm -rf /var/lib/rpm/* && \
+    rm -rf /var/log
+
+RUN groupadd -r app && useradd --no-log-init -r -g app app
+# USER app
+
+
+# Copy over the compiled Python install over
+COPY --from=pythonbuilder --link /root/.pyenv/versions/ /root/.pyenv/versions/
+
+# Copy over the app venv
 WORKDIR /app
-COPY --from=app /app/.venv .venv
+COPY --from=appbuilder --link /app/.venv .venv
 ENV PATH=/app/.venv/bin:$PATH
 
-ENTRYPOINT [ "python3" ]
+
+
+# ENTRYPOINT [ "python3" ]

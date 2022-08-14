@@ -39,7 +39,12 @@ optional = false
 python-versions = ">=3.8"
 
 [package.dependencies]
-numpy = {version = ">=1.21.0", markers = "python_version >= \"3.10\""}
+numpy = [
+    {version = ">=1.21.0", markers = "python_version >= \"3.10\""},
+    {version = ">=1.20.0", markers = "platform_machine == \"arm64\" and python_version < \"3.10\""},
+    {version = ">=1.19.2", markers = "platform_machine == \"aarch64\" and python_version < \"3.10\""},
+    {version = ">=1.18.5", markers = "platform_machine != \"aarch64\" and platform_machine != \"arm64\" and python_version < \"3.10\""},
+]
 python-dateutil = ">=2.8.1"
 pytz = ">=2020.1"
 
@@ -133,8 +138,8 @@ dask = ["distributed", "pandas", "dask"]
 
 [metadata]
 lock-version = "1.1"
-python-versions = "~3.10"
-content-hash = "1b27f1696fe1e2a2c8df4edbd4150344e35ec2f4f2748bb0dae01fd6395cc8ca"
+python-versions = "*"
+content-hash = "4ff758cbb4d0426c30ab3dbe3c3434c9df0957262291c79b54dd37e607093a48"
 
 [metadata.files]
 joblib = [
