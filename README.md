@@ -1,10 +1,4 @@
-Tried:
+A POC of building more secure Python containers
 
-Python builds:
-
-- 3.11RC doesn't work because URL variation 
-- 3.10 works
-- 3.9 works
-- 3.8 works
-- 3.7 works
-- 3.6 fails with clang error
+Uses Pyenv to install an arbitrary python into the container
+Uses Poetry to setup an app's virtual env
