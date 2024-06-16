@@ -2,7 +2,7 @@ set dotenv-load
 
 # IMAGE := 'al2022-python:latest'
 IMAGE := 'jerheff/test-secure-python:latest'
-PYTHON_VERSION := "3.11.9"
+PYTHON_VERSION := "3.12.4"
 
 default:
     @just --list

@@ -58,7 +58,7 @@ COPY pyproject.toml poetry.lock ./
 RUN --mount=type=cache,target=/root/.cache/pypoetry \
     poetry config virtualenvs.in-project true && \
     poetry env use ${PYTHON_VERSION} && \
-    poetry install --without=dev --sync -n && \
+    poetry install --without=dev --sync --no-root && \
     find .venv -depth \
     \( \
     \( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
@@ -66,6 +66,11 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
     \) -exec rm -rf '{}' + && \
     chmod +x .venv/bin/*
 
+# Install the project into the venv as a separate step for caching purposes
+ENV PATH=/app/.venv/bin:$PATH
+COPY secure_python/ /app/secure_python
+COPY pyproject.toml /app/
+RUN pip install --no-deps .
 
 # RUNTIME - creates the runtime environment
 FROM ${BASE_IMAGE} as runtime
@@ -80,17 +85,13 @@ RUN dnf -y install shadow-utils && \
 # Copy over dumb-init
 COPY --from=dumb-init-builder /usr/local/bin/dumb-init /usr/local/bin/
 
-# Copy over the compiled Python install over
+# Copy over the compiled Python install
 COPY --from=pythonbuilder --link /root/.pyenv/versions/ /root/.pyenv/versions/
 
-# Copy over the app venv
+# Copy over the app venv which includes the installed project
 WORKDIR /app
 COPY --from=appbuilder --link /app/.venv .venv
 ENV PATH=/app/.venv/bin:$PATH
-
-# Copy over the source code
-COPY  secure_python /app/secure_python
-ENV PATH=/app:$PATH
 
 # Create and use a non-root user
 RUN groupadd -r app && useradd --no-log-init -r -g app app
@@ -98,12 +99,6 @@ RUN groupadd -r app && useradd --no-log-init -r -g app app
 # Switch to the non-root user
 USER app
 
-# ENTRYPOINT [ "python3", "-m", "secure_python.hello"]
-
-
-# ENTRYPOINT [ "python3" ]
-# CMD [ "-m", "secure_python.hello" ]
-
-
+# Use proper init process
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
 CMD [ "python3", "-m", "secure_python.hello"]

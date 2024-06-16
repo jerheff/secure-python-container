@@ -120,7 +120,7 @@ files = [
 ]
 
 [package.dependencies]
-numpy = {version = ">=1.23.2", markers = "python_version == \"3.11\""}
+numpy = {version = ">=1.26.0", markers = "python_version >= \"3.12\""}
 python-dateutil = ">=2.8.2"
 pytz = ">=2020.1"
 tzdata = ">=2022.7"
@@ -324,5 +324,5 @@ scikit-learn = ["scikit-learn"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "~3.11"
-content-hash = "cec837fe1f6448dfdef66ffc58a1a7a56a6c48379a433fcaed2ac7acd6130607"
+python-versions = "~3.12"
+content-hash = "c7b27217ec326085a1ec4f48c79f4bc660a7ff195ece53438f160f290a4e727c"
