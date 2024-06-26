@@ -13,5 +13,5 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build the hello-docker Docker image
         run: |
-          docker build . --tag ghcr.io/jerheff/secure-python-container-test:latest
+          docker buildx build --build-arg PYTHON_VERSION='3.12.4' . --tag ghcr.io/jerheff/secure-python-container-test:latest
           docker push ghcr.io/jerheff/secure-python-container-test:latest
