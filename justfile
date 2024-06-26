@@ -33,5 +33,11 @@ run-shell:
 
 build-run: build-local && run
 
+trivy:
+    trivy image {{IMAGE}}
+
+dive:
+    dive {{IMAGE}}
+
 setup-mac-dev:
     brew install cmake libomp

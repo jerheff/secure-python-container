@@ -1,10 +1,10 @@
 # syntax = docker/dockerfile:1
 
 # Set the base image to build off of
-ARG BASE_IMAGE=public.ecr.aws/amazonlinux/amazonlinux:2023.4.20240611.0@sha256:e96baa46e2effb0f69d488007bde35a7d01d7fc2ec9f4e1cd65c59846c01775e
+ARG BASE_IMAGE=public.ecr.aws/amazonlinux/amazonlinux:2023.5.20240624.0-minimal
 
 # BUILDER - installs sytem packages for compilation
-FROM ${BASE_IMAGE} as builder
+FROM ${BASE_IMAGE} AS builder
 # Install pyenv installation and python build requirements
 RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     dnf install -y \
@@ -12,18 +12,18 @@ RUN --mount=type=cache,target=/var/cache/dnf,sharing=locked \
     make gcc zlib-devel bzip2 bzip2-devel readline-devel sqlite sqlite-devel openssl-devel tk-devel libffi-devel xz-devel wget
 
 
-FROM builder as dumb-init-builder
+FROM builder AS dumb-init-builder
 
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.5/dumb-init_1.2.5_x86_64
 RUN chmod +x /usr/local/bin/dumb-init
 
 # PYTHONBUILDER - creates the desired version of python
-FROM builder as pythonbuilder
+FROM builder AS pythonbuilder
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Install pyenv
 RUN curl https://pyenv.run | bash
-ENV PATH /root/.pyenv/bin:$PATH
+ENV PATH="/root/.pyenv/bin:$PATH"
 
 # Set the desired version of python to use
 ARG PYTHON_VERSION
@@ -37,12 +37,12 @@ RUN pyenv install ${PYTHON_VERSION} -v && \
     -o \( -type f -a \( -name '*.pyc' -o -name '*.pyo' -o -name '*.a' \) \) \
     \) -exec rm -rf '{}' +
 
-ENV PATH /root/.pyenv/versions/${PYTHON_VERSION}/bin:$PATH
+ENV PATH="/root/.pyenv/versions/${PYTHON_VERSION}/bin:$PATH"
 RUN pip install --upgrade pip setuptools
 
 
 # APPBUILDER - creates the application virtual environment
-FROM pythonbuilder as appbuilder
+FROM pythonbuilder AS appbuilder
 ARG PYTHON_VERSION
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONOPTIMIZE=2
@@ -67,13 +67,13 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
     chmod +x .venv/bin/*
 
 # Install the project into the venv as a separate step for caching purposes
-ENV PATH=/app/.venv/bin:$PATH
+ENV PATH="/app/.venv/bin:$PATH"
 COPY secure_python/ /app/secure_python
 COPY pyproject.toml /app/
 RUN pip install --no-deps .
 
 # RUNTIME - creates the runtime environment
-FROM ${BASE_IMAGE} as runtime
+FROM ${BASE_IMAGE} AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
@@ -91,13 +91,17 @@ COPY --from=pythonbuilder --link /root/.pyenv/versions/ /root/.pyenv/versions/
 # Copy over the app venv which includes the installed project
 WORKDIR /app
 COPY --from=appbuilder --link /app/.venv .venv
-ENV PATH=/app/.venv/bin:$PATH
 
-# Create and use a non-root user
 RUN groupadd -r app && useradd --no-log-init -r -g app app
+RUN chown -R root:app /root && \
+    chmod -R 755 /root
 
 # Switch to the non-root user
 USER app
+ENV PATH="/app/.venv/bin:$PATH"
+RUN python3 --version
+
+# ENTRYPOINT [ "/bin/sh" ]
 
 # Use proper init process
 ENTRYPOINT ["/usr/local/bin/dumb-init", "--"]
