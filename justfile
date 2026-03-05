@@ -8,6 +8,10 @@ default:
 setup:
     uv python install
     uv sync
+    prek install
+
+health:
+    prek run --all-files
 
 lock:
     uv lock

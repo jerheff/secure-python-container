@@ -20,14 +20,18 @@ RUN uv python install --install-dir /opt/python
 
 # Install dependencies (separate step for layer caching)
 COPY pyproject.toml uv.lock ./
-RUN uv venv --python /opt/python/cpython-$(cat .python-version)-linux-*/bin/python3 .venv && \
+# hadolint ignore=SC2046,DL3059
+RUN PY_VERSION=$(cat .python-version) && \
+    uv venv --python /opt/python/cpython-"${PY_VERSION}"-linux-*/bin/python3 .venv && \
     uv sync --frozen --no-dev --no-install-project
 
 # Install the project itself (non-editable so it's fully contained in the venv)
 COPY secure_python/ /app/secure_python
+# hadolint ignore=DL3059
 RUN uv sync --frozen --no-dev --no-editable
 
 # Clean up test/doc cruft from both Python install and venv
+# hadolint ignore=DL3059
 RUN find /opt/python .venv -depth \
     \( \
     \( -type d -a \( -name test -o -name tests -o -name idle_test \) \) \
@@ -35,11 +39,26 @@ RUN find /opt/python .venv -depth \
     \) -exec rm -rf '{}' +
 
 # Install and gather shared libs not included in distroless cc (zlib, OpenMP)
+# hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends zlib1g libgomp1 && \
     mkdir -p /opt/libs && \
     cp -L /lib/*-linux-gnu/libz.so.1 /lib/*-linux-gnu/libgomp.so.1 /opt/libs/
+
+# Prepare passwd/group with app user (preserving distroless's existing users)
+RUN printf '%s\n' \
+    'root:x:0:0:root:/root:/sbin/nologin' \
+    'nobody:x:65534:65534:nobody:/nonexistent:/sbin/nologin' \
+    'nonroot:x:65532:65532:nonroot:/home/nonroot:/sbin/nologin' \
+    'app:x:10001:10001:app:/app:/sbin/nologin' > /opt/passwd && \
+    printf '%s\n' \
+    'root:x:0:' \
+    'nobody:x:65534:' \
+    'tty:x:5:' \
+    'staff:x:50:' \
+    'nonroot:x:65532:' \
+    'app:x:10001:' > /opt/group
 
 # RUNTIME - Google Distroless (cc variant includes libstdc++ for native extensions)
 FROM ${RUNTIME_IMAGE} AS runtime
@@ -48,21 +67,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV LD_LIBRARY_PATH=/opt/libs
 
-# Append non-root app user (preserve distroless's existing root/nobody/nonroot)
-COPY <<passwd /etc/passwd
-root:x:0:0:root:/root:/sbin/nologin
-nobody:x:65534:65534:nobody:/nonexistent:/sbin/nologin
-nonroot:x:65532:65532:nonroot:/home/nonroot:/sbin/nologin
-app:x:10001:10001:app:/app:/sbin/nologin
-passwd
-COPY <<group /etc/group
-root:x:0:
-nobody:x:65534:
-tty:x:5:
-staff:x:50:
-nonroot:x:65532:
-app:x:10001:
-group
+# Non-root app user (preserving distroless's existing root/nobody/nonroot)
+COPY --from=appbuilder /opt/passwd /etc/passwd
+COPY --from=appbuilder /opt/group /etc/group
 
 # Copy shared libs, Python install, and app venv
 COPY --from=appbuilder /opt/libs/ /opt/libs/
