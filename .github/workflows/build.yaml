@@ -1,7 +1,18 @@
 name: publish
 on: [push]
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install prek
+        run: uv tool install prek
+      - name: Run hooks
+        run: prek run --all-files
+
   build-image:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
