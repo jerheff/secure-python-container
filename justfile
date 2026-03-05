@@ -1,35 +1,38 @@
 set dotenv-load
 
-# IMAGE := 'al2022-python:latest'
 IMAGE := 'jerheff/test-secure-python:latest'
-PYTHON_VERSION := "3.12.4"
 
 default:
     @just --list
 
 setup:
-    pyenv local {{PYTHON_VERSION}}
-    poetry install --sync
+    uv python install
+    uv sync
+    prek install
+
+health:
+    prek run --all-files
 
 lock:
-    poetry lock --no-update
-    poetry install --sync
+    uv lock
+    uv sync
 
 autoupdate:
-    poetry lock
-    poetry install --sync
+    uv lock --upgrade
+    uv sync
 
 build-local:
-    docker buildx build --build-arg PYTHON_VERSION='{{PYTHON_VERSION}}' -t {{IMAGE}} --load .
+    docker buildx build -t {{IMAGE}} --load .
 
 build-push:
-    docker buildx build --build-arg PYTHON_VERSION='{{PYTHON_VERSION}}' --platform linux/amd64,linux/arm64 -t {{IMAGE}} --push .
+    docker buildx build --platform linux/amd64,linux/arm64 -t {{IMAGE}} --push .
 
 run:
     docker run --rm -it {{IMAGE}}
 
-run-shell:
-    docker run --rm -it --entrypoint "/bin/bash" {{IMAGE}}
+# No shell available in distroless — use debug image to troubleshoot
+run-debug:
+    docker run --rm -it --entrypoint "/busybox" gcr.io/distroless/cc-debian12:debug sh
 
 build-run: build-local && run
 
@@ -38,6 +41,3 @@ trivy:
 
 dive:
     dive {{IMAGE}}
-
-setup-mac-dev:
-    brew install cmake libomp
